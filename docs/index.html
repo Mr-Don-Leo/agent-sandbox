@@ -204,6 +204,12 @@
   .sk-xp .bar { background: linear-gradient(180deg, #3d95ff, #2456c9); }
   .sk-xp .win { background: #fdfcf7; border: 1px solid #7f9db9; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
 
+  .dl-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .dl-card h3 { margin: 0; }
+  .dl-size { margin: 0; color: var(--text-tertiary); font-size: 12px; }
+  .dl-cmd { margin: 2px 0 0; }
+  .dl-cmd code { font-size: 11px; }
+
   .dev-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 760px) { .dev-cols { grid-template-columns: 1fr; } }
 
@@ -223,14 +229,14 @@
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
       <a href="#skins">Skins</a>
-      <a href="#install">Install</a>
+      <a href="#install">Download</a>
       <a href="https://github.com/Mr-Don-Leo/agent-sandbox">GitHub</a>
     </div>
   </div>
 </nav>
 
 <header class="hero wrap">
-  <span class="pill">Linux · Tauri 2 + React · MIT</span>
+  <span class="pill">v0.1.0 · Linux · Tauri 2 + React · MIT</span>
   <h1>Run coding agents.<br />Keep your machine.</h1>
   <p class="lede">
     AgentSandbox executes coding agents inside disposable Docker containers with
@@ -238,7 +244,7 @@
     before it touches your files.
   </p>
   <div class="cta">
-    <a class="btn btn-primary" href="#install">Get AgentSandbox</a>
+    <a class="btn btn-primary" href="#install">Download v0.1.0</a>
     <a class="btn" href="https://github.com/Mr-Don-Leo/agent-sandbox">View source</a>
   </div>
   <div class="shot">
@@ -358,8 +364,36 @@
 
 <section id="install" class="wrap">
   <div class="section-head">
-    <h2>Install</h2>
-    <p>Build from source today — deb, rpm, and AppImage bundles come out of one command.</p>
+    <h2>Download</h2>
+    <p>Version 0.1.0 for x86_64 Linux. Requires a running Docker daemon.
+    All builds on the <a href="https://github.com/Mr-Don-Leo/agent-sandbox/releases/tag/v0.1.0">releases page</a>.</p>
+  </div>
+  <div class="grid">
+    <div class="card dl-card">
+      <h3>Debian / Ubuntu</h3>
+      <p class="dl-size">.deb · 3 MB</p>
+      <a class="btn btn-primary" href="https://github.com/Mr-Don-Leo/agent-sandbox/releases/download/v0.1.0/AgentSandbox_0.1.0_amd64.deb">Download .deb</a>
+      <p class="dl-cmd"><code>sudo apt install ./AgentSandbox_0.1.0_amd64.deb</code></p>
+    </div>
+    <div class="card dl-card">
+      <h3>Fedora / RHEL</h3>
+      <p class="dl-size">.rpm · 3 MB</p>
+      <a class="btn btn-primary" href="https://github.com/Mr-Don-Leo/agent-sandbox/releases/download/v0.1.0/AgentSandbox-0.1.0-1.x86_64.rpm">Download .rpm</a>
+      <p class="dl-cmd"><code>sudo dnf install ./AgentSandbox-0.1.0-1.x86_64.rpm</code></p>
+    </div>
+    <div class="card dl-card">
+      <h3>Any distro</h3>
+      <p class="dl-size">AppImage · 103 MB, self-contained</p>
+      <a class="btn btn-primary" href="https://github.com/Mr-Don-Leo/agent-sandbox/releases/download/v0.1.0/AgentSandbox_0.1.0_amd64.AppImage">Download AppImage</a>
+      <p class="dl-cmd"><code>chmod +x … &amp;&amp; ./AgentSandbox_0.1.0_amd64.AppImage</code></p>
+    </div>
+  </div>
+</section>
+
+<section id="development" class="wrap">
+  <div class="section-head">
+    <h2>Build from source</h2>
+    <p>One command produces the deb, rpm, and AppImage bundles yourself.</p>
   </div>
   <div class="dev-cols">
     <div class="card">
