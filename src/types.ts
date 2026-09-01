@@ -31,13 +31,6 @@ export interface DockerStatus {
   error: string | null;
 }
 
-export interface ExecResult {
-  exit_code: number;
-  stdout: string;
-  stderr: string;
-  blocked: boolean;
-}
-
 export interface DiffSummary {
   files: number;
   additions: number;

@@ -148,6 +148,51 @@ pub fn exec_args(id: &str, command: &str) -> Vec<String> {
     ]
 }
 
+/// Run ids come from the frontend; strip anything that isn't safe inside a
+/// file path or shell word.
+pub fn sanitize_run_id(run_id: &str) -> String {
+    run_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect()
+}
+
+fn run_pid_file(run_id: &str) -> String {
+    format!("/tmp/.agentsandbox-run-{}.pid", sanitize_run_id(run_id))
+}
+
+/// Streaming variant of `exec_args`: records the shell's PID in the container
+/// so the run can be killed later, then execs the user command in place (same
+/// PID). The command is passed as `$0`, never interpolated into the script.
+pub fn exec_stream_args(id: &str, run_id: &str, command: &str) -> Vec<String> {
+    vec![
+        "exec".into(),
+        container_name(id),
+        "sh".into(),
+        "-c".into(),
+        format!("echo $$ > {pid}; exec sh -c \"$0\"", pid = run_pid_file(run_id)),
+        command.into(),
+    ]
+}
+
+/// Kill a streaming run: TERM its process group if possible, else the shell
+/// itself, then drop the pid file. Killing the remote process closes the
+/// `docker exec` client's streams, which ends the run on the app side.
+pub fn exec_kill_args(id: &str, run_id: &str) -> Vec<String> {
+    let pid_file = run_pid_file(run_id);
+    vec![
+        "exec".into(),
+        container_name(id),
+        "sh".into(),
+        "-c".into(),
+        format!(
+            "pid=$(cat {pid_file} 2>/dev/null); \
+             [ -n \"$pid\" ] && kill -TERM -\"$pid\" 2>/dev/null || kill -TERM \"$pid\" 2>/dev/null; \
+             rm -f {pid_file}"
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +260,30 @@ mod tests {
     fn exec_uses_a_non_login_shell() {
         let args = exec_args("abc", "make test");
         assert_eq!(args, ["exec", "asb-abc", "sh", "-c", "make test"]);
+    }
+
+    #[test]
+    fn stream_exec_passes_command_as_positional_argument() {
+        let args = exec_stream_args("abc", "run-1", "echo $(rm -rf /)");
+        // The command is the final positional arg ($0), never spliced into
+        // the script, so shell metacharacters in it cannot escape.
+        assert_eq!(args.last().unwrap(), "echo $(rm -rf /)");
+        assert!(args[4].contains("/tmp/.agentsandbox-run-run-1.pid"));
+        assert!(args[4].contains("exec sh -c \"$0\""));
+    }
+
+    #[test]
+    fn run_ids_are_sanitized_for_paths_and_shell() {
+        assert_eq!(sanitize_run_id("ab-12"), "ab-12");
+        assert_eq!(sanitize_run_id("../etc; rm -rf $HOME"), "etcrm-rfHOME");
+    }
+
+    #[test]
+    fn kill_targets_recorded_pid_and_cleans_up() {
+        let args = exec_kill_args("abc", "run-1");
+        assert_eq!(args[1], "asb-abc");
+        assert!(args[4].contains("kill -TERM"));
+        assert!(args[4].contains("rm -f /tmp/.agentsandbox-run-run-1.pid"));
     }
 
     #[test]

@@ -1,8 +1,14 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use tauri::Emitter;
 
 use agentsandbox_core::{docker, proxy, shim, sync, NetworkMode, Policy, Sandbox, SandboxStatus, WorkspaceMode};
 use serde::Serialize;
@@ -15,11 +21,17 @@ pub struct DockerStatus {
     error: Option<String>,
 }
 
-#[derive(Serialize)]
-pub struct ExecResult {
+#[derive(Clone, Serialize)]
+struct ExecLine {
+    run_id: String,
+    kind: String,
+    text: String,
+}
+
+#[derive(Clone, Serialize)]
+struct ExecDone {
+    run_id: String,
     exit_code: i32,
-    stdout: String,
-    stderr: String,
     blocked: bool,
 }
 
@@ -314,21 +326,73 @@ fn apply_workspace(id: String) -> Result<(), String> {
     result
 }
 
+fn sandbox_id_of(container: &str) -> &str {
+    container.strip_prefix("asb-").unwrap_or(container)
+}
+
+/// Start a command in the sandbox and stream its output as `exec:line`
+/// events, finishing with one `exec:done`. Returns immediately.
 #[tauri::command]
-fn exec_in_sandbox(id: String, command: String) -> Result<ExecResult, String> {
-    let output = Command::new("docker")
-        .args(["exec", id.as_str(), "sh", "-c", command.as_str()])
-        .output()
+fn exec_stream(
+    app: tauri::AppHandle,
+    id: String,
+    run_id: String,
+    command: String,
+) -> Result<(), String> {
+    let run_id = docker::sanitize_run_id(&run_id);
+    let mut child = Command::new("docker")
+        .args(docker::exec_stream_args(sandbox_id_of(&id), &run_id, &command))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("failed to invoke docker: {e}"))?;
 
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    let exit_code = output.status.code().unwrap_or(-1);
-    Ok(ExecResult {
-        exit_code,
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        blocked: exit_code == shim::BLOCKED_EXIT_CODE && stderr.contains(shim::BLOCKED_MARKER),
-        stderr,
-    })
+    let stdout = child.stdout.take().expect("stdout piped");
+    let stderr = child.stderr.take().expect("stderr piped");
+    let saw_marker = Arc::new(AtomicBool::new(false));
+
+    let err_app = app.clone();
+    let err_run_id = run_id.clone();
+    let err_marker = saw_marker.clone();
+    let err_thread = thread::spawn(move || {
+        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            if line.contains(shim::BLOCKED_MARKER) {
+                err_marker.store(true, Ordering::Relaxed);
+            }
+            let _ = err_app.emit(
+                "exec:line",
+                ExecLine { run_id: err_run_id.clone(), kind: "err".into(), text: line },
+            );
+        }
+    });
+
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            let _ = app.emit(
+                "exec:line",
+                ExecLine { run_id: run_id.clone(), kind: "out".into(), text: line },
+            );
+        }
+        let _ = err_thread.join();
+        let exit_code = child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
+        let blocked =
+            exit_code == shim::BLOCKED_EXIT_CODE && saw_marker.load(Ordering::Relaxed);
+        let _ = app.emit("exec:done", ExecDone { run_id, exit_code, blocked });
+    });
+
+    Ok(())
+}
+
+/// Kill a streaming run inside the container; the closing streams end the
+/// corresponding `exec_stream` naturally.
+#[tauri::command]
+fn exec_stop(id: String, run_id: String) -> Result<(), String> {
+    docker(&docker::exec_kill_args(
+        sandbox_id_of(&id),
+        &docker::sanitize_run_id(&run_id),
+    ))
+    .map(|_| ())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -341,7 +405,8 @@ pub fn run() {
             start_sandbox,
             stop_sandbox,
             remove_sandbox,
-            exec_in_sandbox,
+            exec_stream,
+            exec_stop,
             workspace_diff,
             apply_workspace,
         ])
