@@ -60,6 +60,7 @@ export const DEFAULT_POLICY: Policy = {
 
 export const KNOWN_IMAGES: { value: string; sub: string }[] = [
   { value: "ubuntu:24.04", sub: "Minimal Ubuntu LTS" },
+  { value: "alpine", sub: "Tiny busybox-based image" },
   { value: "node:22-bookworm", sub: "Node.js 22 toolchain" },
   { value: "python:3.12-bookworm", sub: "Python 3.12 toolchain" },
   { value: "rust:1-bookworm", sub: "Rust stable toolchain" },

@@ -20,6 +20,8 @@ export interface Backend {
   execStop(id: string, runId: string): Promise<void>;
   workspaceDiff(id: string): Promise<WorkspaceDiff>;
   applyWorkspace(id: string): Promise<void>;
+  pickFolder(): Promise<string | null>;
+  openTerminal(id: string): Promise<void>;
 }
 
 export interface ExecCallbacks {
@@ -62,6 +64,12 @@ const tauriBackend: Backend = {
   execStop: (id, runId) => invoke("exec_stop", { id, runId }),
   workspaceDiff: (id) => invoke("workspace_diff", { id }),
   applyWorkspace: (id) => invoke("apply_workspace", { id }),
+  async pickFolder() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const picked = await open({ directory: true, multiple: false });
+    return typeof picked === "string" ? picked : null;
+  },
+  openTerminal: (id) => invoke("open_terminal", { id }),
 };
 
 // ── Mock backend for browser development ─────────────────────────────────
@@ -144,6 +152,12 @@ const mockBackend: Backend = {
     };
   },
   async applyWorkspace() {},
+  async pickFolder() {
+    return null; // no native picker in the browser preview
+  },
+  async openTerminal() {
+    throw new Error("Terminal is only available in the desktop app");
+  },
 };
 
 export const backend: Backend = isTauri ? tauriBackend : mockBackend;

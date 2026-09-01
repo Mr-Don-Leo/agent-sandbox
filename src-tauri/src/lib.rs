@@ -384,6 +384,28 @@ fn exec_stream(
     Ok(())
 }
 
+/// Open the user's terminal emulator with an interactive shell in the
+/// sandbox, so they can poke around beyond one-off commands.
+#[tauri::command]
+fn open_terminal(id: String) -> Result<(), String> {
+    let exec = format!("docker exec -it {id} sh");
+    let candidates: &[(&str, Vec<String>)] = &[
+        ("x-terminal-emulator", vec!["-e".into(), format!("sh -c '{exec}'")]),
+        ("gnome-terminal", vec!["--".into(), "sh".into(), "-c".into(), exec.clone()]),
+        ("konsole", vec!["-e".into(), "sh".into(), "-c".into(), exec.clone()]),
+        ("ptyxis", vec!["--".into(), "sh".into(), "-c".into(), exec.clone()]),
+        ("xterm", vec!["-e".into(), "sh".into(), "-c".into(), exec.clone()]),
+    ];
+    for (term, args) in candidates {
+        if Command::new(*term).args(args).spawn().is_ok() {
+            return Ok(());
+        }
+    }
+    Err(format!(
+        "No terminal emulator found — run manually: {exec}"
+    ))
+}
+
 /// Kill a streaming run inside the container; the closing streams end the
 /// corresponding `exec_stream` naturally.
 #[tauri::command]
@@ -398,6 +420,7 @@ fn exec_stop(id: String, run_id: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             docker_status,
             list_sandboxes,
@@ -407,6 +430,7 @@ pub fn run() {
             remove_sandbox,
             exec_stream,
             exec_stop,
+            open_terminal,
             workspace_diff,
             apply_workspace,
         ])
