@@ -1,0 +1,160 @@
+/* Design tokens — the only source of truth for color, radius, font, shadow.
+   Skins override tokens only; components never hard-code these values. */
+
+:root {
+  --font-ui: -apple-system, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  --accent: #007aff;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(0, 122, 255, 0.14);
+  --danger: #ff3b30;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+  --success: #34c759;
+  --success-soft: rgba(52, 199, 89, 0.14);
+  --warning: #ff9500;
+  --warning-soft: rgba(255, 149, 0, 0.14);
+
+  --bg: #f5f5f7;
+  --bg-elevated: #ffffff;
+  --bg-sidebar: rgba(246, 246, 248, 0.82);
+  --bg-input: rgba(0, 0, 0, 0.045);
+  --bg-hover: rgba(0, 0, 0, 0.06);
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #aeaeb2;
+  --border: rgba(0, 0, 0, 0.09);
+
+  --terminal-bg: #1c1c1e;
+  --terminal-fg: #e8e8ed;
+
+  --shadow-card: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 24px 64px rgba(0, 0, 0, 0.22);
+
+  --titlebar-bg: transparent;
+  --titlebar-fg: var(--text);
+
+  --font-size-base: 14px;
+  --heading-tracking: -0.3px;
+  --heading-transform: none;
+
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.2);
+  --danger: #ff453a;
+  --danger-soft: rgba(255, 69, 58, 0.16);
+  --success: #30d158;
+  --success-soft: rgba(48, 209, 88, 0.18);
+  --warning: #ff9f0a;
+  --warning-soft: rgba(255, 159, 10, 0.18);
+
+  --bg: #1c1c1e;
+  --bg-elevated: #2c2c2e;
+  --bg-sidebar: rgba(28, 28, 30, 0.78);
+  --bg-input: rgba(255, 255, 255, 0.07);
+  --bg-hover: rgba(255, 255, 255, 0.1);
+  --text: #f5f5f7;
+  --text-secondary: #98989d;
+  --text-tertiary: #636366;
+  --border: rgba(255, 255, 255, 0.1);
+
+  --terminal-bg: #121214;
+  --terminal-fg: #e8e8ed;
+
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
+/* ── Skin: cyberpunk (always dark) ─────────────────────────────────────── */
+html[data-skin="cyberpunk"] {
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --accent: #00f0ff;
+  --accent-contrast: #05040a;
+  --accent-soft: rgba(0, 240, 255, 0.14);
+  --danger: #ff2ec4;
+  --danger-soft: rgba(255, 46, 196, 0.16);
+  --success: #58ffa4;
+  --success-soft: rgba(88, 255, 164, 0.14);
+  --warning: #ffd166;
+  --warning-soft: rgba(255, 209, 102, 0.14);
+
+  --bg: #0b0714;
+  --bg-elevated: #141024;
+  --bg-sidebar: rgba(13, 9, 24, 0.82);
+  --bg-input: rgba(0, 240, 255, 0.06);
+  --bg-hover: rgba(0, 240, 255, 0.1);
+  --text: #e9f6ff;
+  --text-secondary: #8fa3c4;
+  --text-tertiary: #55628a;
+  --border: rgba(0, 240, 255, 0.16);
+
+  --terminal-bg: #070510;
+  --terminal-fg: #c8f7ff;
+
+  --shadow-card: 0 0 0 1px rgba(0, 240, 255, 0.1), 0 0 24px rgba(0, 240, 255, 0.07);
+  --shadow-card-hover: 0 0 0 1px rgba(0, 240, 255, 0.22), 0 0 32px rgba(0, 240, 255, 0.14);
+  --shadow-modal: 0 0 0 1px rgba(0, 240, 255, 0.2), 0 0 64px rgba(0, 240, 255, 0.18);
+
+  --heading-tracking: 1.2px;
+  --heading-transform: uppercase;
+
+  color-scheme: dark;
+}
+
+/* ── Skin: xp (always light) ───────────────────────────────────────────── */
+html[data-skin="xp"] {
+  --font-ui: Tahoma, "Segoe UI", Verdana, sans-serif;
+  --font-mono: "Lucida Console", Menlo, monospace;
+
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 5px;
+
+  --accent: #2456c9;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(61, 149, 255, 0.18);
+  --danger: #d63a2f;
+  --danger-soft: rgba(214, 58, 47, 0.14);
+  --success: #2f9e44;
+  --success-soft: rgba(47, 158, 68, 0.16);
+  --warning: #c77700;
+  --warning-soft: rgba(199, 119, 0, 0.15);
+
+  --bg: #ece9d8;
+  --bg-elevated: #fdfcf7;
+  --bg-sidebar: rgba(236, 233, 216, 0.94);
+  --bg-input: #ffffff;
+  --bg-hover: rgba(61, 149, 255, 0.12);
+  --text: #1b1b1b;
+  --text-secondary: #5a5a52;
+  --text-tertiary: #8d8d82;
+  --border: #7f9db9;
+
+  --terminal-bg: #0c0c0c;
+  --terminal-fg: #e5e5e5;
+
+  --shadow-card: 0 0 0 1px #7f9db9, 0 2px 6px rgba(0, 0, 0, 0.12);
+  --shadow-card-hover: 0 0 0 1px #5b7fa6, 0 4px 10px rgba(0, 0, 0, 0.18);
+  --shadow-modal: 0 0 0 1px #5b7fa6, 0 12px 32px rgba(0, 0, 0, 0.3);
+
+  --titlebar-bg: linear-gradient(180deg, #3d95ff 0%, #2456c9 100%);
+  --titlebar-fg: #ffffff;
+
+  --font-size-base: 13px;
+
+  color-scheme: light;
+}
