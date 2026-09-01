@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/backend.ts","./src/main.tsx","./src/theme.ts","./src/types.ts","./src/ui/controls.tsx","./src/views/DiffModal.tsx","./src/views/NewSandboxModal.tsx","./src/views/SandboxDetail.tsx","./src/views/SandboxesView.tsx","./src/views/SettingsView.tsx"],"version":"5.9.3"}
