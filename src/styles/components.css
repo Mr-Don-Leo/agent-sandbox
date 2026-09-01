@@ -516,7 +516,7 @@ html[data-skin="xp"] .modal-title {
   background: var(--accent-soft);
 }
 
-.banner-success {
+.banner.banner-success {
   background: var(--success-soft);
   color: var(--success);
 }
