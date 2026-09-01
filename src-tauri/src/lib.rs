@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use agentsandbox_core::{docker, proxy, shim, NetworkMode, Policy, Sandbox, SandboxStatus, WorkspaceMode};
+use agentsandbox_core::{docker, proxy, shim, sync, NetworkMode, Policy, Sandbox, SandboxStatus, WorkspaceMode};
 use serde::Serialize;
 use tauri::Manager;
 
@@ -207,6 +207,113 @@ fn remove_sandbox(id: String) -> Result<(), String> {
     Ok(())
 }
 
+fn policy_of(id: &str) -> Result<Policy, String> {
+    let json = docker(&[
+        "inspect".into(),
+        "--format".into(),
+        r#"{{index .Config.Labels "agentsandbox.policy"}}"#.into(),
+        id.to_string(),
+    ])?;
+    serde_json::from_str(json.trim()).map_err(|e| format!("unreadable sandbox policy: {e}"))
+}
+
+/// Stage the container workspace into a fresh temp dir; caller must remove it.
+fn stage_workspace(id: &str) -> Result<PathBuf, String> {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let staged = std::env::temp_dir().join(format!("agentsandbox-staged-{nanos:x}"));
+    fs::create_dir_all(&staged).map_err(|e| e.to_string())?;
+    docker(&sync::stage_args(id, &staged.to_string_lossy()))
+        .map_err(|e| {
+            let _ = fs::remove_dir_all(&staged);
+            e
+        })?;
+    Ok(staged)
+}
+
+fn copy_mode_workspace(policy: &Policy) -> Result<String, String> {
+    if policy.workspace_mode != WorkspaceMode::Copy {
+        return Err("Change review is only available for disposable-copy workspaces".into());
+    }
+    if policy.workspace_path.trim().is_empty() {
+        return Err("This sandbox has no workspace folder".into());
+    }
+    Ok(policy.workspace_path.clone())
+}
+
+const DIFF_LIMIT_BYTES: usize = 400_000;
+
+#[derive(Serialize)]
+pub struct WorkspaceDiff {
+    diff: String,
+    truncated: bool,
+    summary: sync::DiffSummary,
+}
+
+#[tauri::command]
+fn workspace_diff(id: String) -> Result<WorkspaceDiff, String> {
+    let host = copy_mode_workspace(&policy_of(&id)?)?;
+    let staged = stage_workspace(&id)?;
+    let staged_str = staged.to_string_lossy().into_owned();
+
+    let output = Command::new("diff")
+        .args(sync::diff_args(&host, &staged_str))
+        .output()
+        .map_err(|e| format!("failed to invoke diff: {e}"));
+    let result = match output {
+        Ok(out) if out.status.code() == Some(0) || out.status.code() == Some(1) => {
+            // Temp-dir paths mean nothing to the user; label the two sides.
+            let mut diff = String::from_utf8_lossy(&out.stdout)
+                .replace(&staged_str, "sandbox")
+                .replace(&host, "host");
+            let truncated = diff.len() > DIFF_LIMIT_BYTES;
+            if truncated {
+                diff.truncate(DIFF_LIMIT_BYTES);
+                diff.push_str("\n… diff truncated …\n");
+            }
+            Ok(WorkspaceDiff { summary: sync::summarize_diff(&diff), diff, truncated })
+        }
+        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).into_owned()),
+        Err(e) => Err(e),
+    };
+
+    let _ = fs::remove_dir_all(&staged);
+    result
+}
+
+#[tauri::command]
+fn apply_workspace(id: String) -> Result<(), String> {
+    let host = copy_mode_workspace(&policy_of(&id)?)?;
+    let staged = stage_workspace(&id)?;
+    let staged_str = staged.to_string_lossy().into_owned();
+
+    let have_rsync = Command::new("rsync")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    let (program, args) = if have_rsync {
+        ("rsync", sync::apply_args_rsync(&staged_str, &host))
+    } else {
+        ("cp", sync::apply_args_cp(&staged_str, &host))
+    };
+    let result = Command::new(program)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("failed to invoke {program}: {e}"))
+        .and_then(|out| {
+            if out.status.success() {
+                Ok(())
+            } else {
+                Err(String::from_utf8_lossy(&out.stderr).into_owned())
+            }
+        });
+
+    let _ = fs::remove_dir_all(&staged);
+    result
+}
+
 #[tauri::command]
 fn exec_in_sandbox(id: String, command: String) -> Result<ExecResult, String> {
     let output = Command::new("docker")
@@ -235,6 +342,8 @@ pub fn run() {
             stop_sandbox,
             remove_sandbox,
             exec_in_sandbox,
+            workspace_diff,
+            apply_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentSandbox");

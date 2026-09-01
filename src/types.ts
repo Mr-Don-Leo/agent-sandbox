@@ -38,6 +38,18 @@ export interface ExecResult {
   blocked: boolean;
 }
 
+export interface DiffSummary {
+  files: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface WorkspaceDiff {
+  diff: string;
+  truncated: boolean;
+  summary: DiffSummary;
+}
+
 export interface RunLine {
   kind: "cmd" | "out" | "err" | "meta";
   text: string;

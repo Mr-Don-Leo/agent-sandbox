@@ -1,4 +1,4 @@
-import type { DockerStatus, ExecResult, Policy, Sandbox } from "./types";
+import type { DockerStatus, ExecResult, Policy, Sandbox, WorkspaceDiff } from "./types";
 
 // In a Tauri window we call the Rust commands; in a plain browser (vite dev
 // without the shell) we fall back to an in-memory mock so the UI stays usable.
@@ -17,6 +17,8 @@ export interface Backend {
   stopSandbox(id: string): Promise<void>;
   removeSandbox(id: string): Promise<void>;
   execInSandbox(id: string, command: string): Promise<ExecResult>;
+  workspaceDiff(id: string): Promise<WorkspaceDiff>;
+  applyWorkspace(id: string): Promise<void>;
 }
 
 const tauriBackend: Backend = {
@@ -27,6 +29,8 @@ const tauriBackend: Backend = {
   stopSandbox: (id) => invoke("stop_sandbox", { id }),
   removeSandbox: (id) => invoke("remove_sandbox", { id }),
   execInSandbox: (id, command) => invoke("exec_in_sandbox", { id, command }),
+  workspaceDiff: (id) => invoke("workspace_diff", { id }),
+  applyWorkspace: (id) => invoke("apply_workspace", { id }),
 };
 
 // ── Mock backend for browser development ─────────────────────────────────
@@ -94,6 +98,23 @@ const mockBackend: Backend = {
       blocked: false,
     };
   },
+  async workspaceDiff() {
+    const diff = [
+      "--- host/src/main.py",
+      "+++ sandbox/src/main.py",
+      "@@ -1,3 +1,4 @@",
+      " import sys",
+      "-print('hello')",
+      "+print('hello, world')",
+      "+print(sys.argv)",
+    ].join("\n");
+    return {
+      diff,
+      truncated: false,
+      summary: { files: 1, additions: 2, deletions: 1 },
+    };
+  },
+  async applyWorkspace() {},
 };
 
 export const backend: Backend = isTauri ? tauriBackend : mockBackend;

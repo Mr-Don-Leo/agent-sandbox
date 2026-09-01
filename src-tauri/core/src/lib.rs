@@ -6,5 +6,6 @@ pub mod docker;
 pub mod policy;
 pub mod proxy;
 pub mod shim;
+pub mod sync;
 
 pub use policy::{NetworkMode, NetworkPolicy, Policy, Sandbox, SandboxStatus, WorkspaceMode};

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { backend } from "../backend";
 import { RunLine, Sandbox } from "../types";
+import { Modal } from "../ui/controls";
+import { DiffModal } from "./DiffModal";
 
 const STATUS_PILL: Record<Sandbox["status"], string> = {
   running: "pill-success",
@@ -25,11 +27,15 @@ export function SandboxDetail(props: {
   const [lines, setLines] = useState<RunLine[]>([]);
   const [command, setCommand] = useState("");
   const [running, setRunning] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const consoleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLines([]);
     setCommand("");
+    setShowDiff(false);
+    setConfirmDelete(false);
   }, [sandbox.id]);
 
   useEffect(() => {
@@ -87,7 +93,7 @@ export function SandboxDetail(props: {
           <button className="btn" onClick={toggleRunning}>
             {sandbox.status === "running" ? "Stop" : "Start"}
           </button>
-          <button className="btn btn-danger" onClick={remove}>
+          <button className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
             Delete
           </button>
         </div>
@@ -109,6 +115,14 @@ export function SandboxDetail(props: {
               {sandbox.policy.workspace_mode === "ro" && "Read-only mount"}
               {sandbox.policy.workspace_mode === "rw" && "Read-write mount"}
             </div>
+            {sandbox.policy.workspace_mode === "copy" &&
+              sandbox.policy.workspace_path && (
+                <div>
+                  <button className="btn btn-sm" onClick={() => setShowDiff(true)}>
+                    Review changes
+                  </button>
+                </div>
+              )}
           </div>
           <div className="card summary-card">
             <span className="summary-title">Network</span>
@@ -181,6 +195,36 @@ export function SandboxDetail(props: {
           </div>
         </div>
       </div>
+
+      {showDiff && (
+        <DiffModal
+          sandboxId={sandbox.id}
+          workspacePath={sandbox.policy.workspace_path}
+          onClose={() => setShowDiff(false)}
+        />
+      )}
+
+      {confirmDelete && (
+        <Modal
+          title="Delete sandbox?"
+          onClose={() => setConfirmDelete(false)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-danger" onClick={remove}>
+                Delete “{sandbox.name}”
+              </button>
+            </>
+          }
+        >
+          <p>
+            The container and any un-applied workspace changes inside it are
+            destroyed. The host folder is not touched.
+          </p>
+        </Modal>
+      )}
     </>
   );
 }
