@@ -53,8 +53,10 @@ fn docker_status() -> DockerStatus {
 
 #[tauri::command]
 fn list_sandboxes() -> Result<Vec<Sandbox>, String> {
+    // Container names (asb-<id>) are the canonical sandbox id everywhere —
+    // create_sandbox returns them and every docker command accepts them.
     let format = concat!(
-        "{{.ID}}\x1f{{.State}}\x1f{{.CreatedAt}}\x1f",
+        "{{.Names}}\x1f{{.State}}\x1f{{.CreatedAt}}\x1f",
         "{{.Label \"agentsandbox.name\"}}\x1f{{.Label \"agentsandbox.policy\"}}"
     );
     let out = docker(&[
@@ -82,8 +84,6 @@ fn list_sandboxes() -> Result<Vec<Sandbox>, String> {
             "created" | "exited" | "paused" => SandboxStatus::Stopped,
             _ => SandboxStatus::Error,
         };
-        // Container names are asb-<id>; recover the id from `docker inspect`
-        // names is overkill — the short container ID works for all commands.
         sandboxes.push(Sandbox {
             id: parts[0].to_string(),
             name: parts[3].to_string(),
@@ -188,20 +188,11 @@ fn stop_sandbox(id: String) -> Result<(), String> {
 
 #[tauri::command]
 fn remove_sandbox(id: String) -> Result<(), String> {
-    // Resolve the asb-<sandbox-id> name before removal so the sidecar network
-    // and proxy (named after the sandbox id, not the container id) go too.
-    let name = docker(&[
-        "inspect".into(),
-        "--format".into(),
-        "{{.Name}}".into(),
-        id.clone(),
-    ])
-    .map(|n| n.trim().trim_start_matches('/').to_string())
-    .unwrap_or_default();
+    docker(&["rm".into(), "-f".into(), id.clone()]).map(|_| ())?;
 
-    docker(&["rm".into(), "-f".into(), id]).map(|_| ())?;
-
-    if let Some(sandbox_id) = name.strip_prefix("asb-") {
+    // The allowlist sidecar network and proxy are named after the sandbox id
+    // embedded in the container name (asb-<sandbox-id>); remove them too.
+    if let Some(sandbox_id) = id.strip_prefix("asb-") {
         let _ = docker(&[
             "rm".into(),
             "-f".into(),
