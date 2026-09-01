@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { backend } from "../backend";
+import { backend, isMock } from "../backend";
 import { RunLine, Sandbox } from "../types";
 import { Modal } from "../ui/controls";
 import { DiffModal } from "./DiffModal";
@@ -30,6 +30,8 @@ export function SandboxDetail(props: {
   const [showDiff, setShowDiff] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const consoleRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<string[]>([]);
+  const [historyPos, setHistoryPos] = useState(-1);
   // Guards against events from a run started on a previously viewed sandbox.
   const activeRunRef = useRef<string | null>(null);
   const running = runId !== null;
@@ -53,6 +55,8 @@ export function SandboxDetail(props: {
     const cmd = command.trim();
     if (!cmd || running) return;
     setCommand("");
+    historyRef.current.push(cmd);
+    setHistoryPos(-1);
     const id = crypto.randomUUID();
     setRunId(id);
     activeRunRef.current = id;
@@ -110,6 +114,18 @@ export function SandboxDetail(props: {
           <div className="subtitle mono selectable">{sandbox.id}</div>
         </div>
         <div className="row">
+          {!isMock && sandbox.status === "running" && (
+            <button
+              className="btn"
+              onClick={() =>
+                backend.openTerminal(sandbox.id).catch((e) =>
+                  append({ kind: "err", text: String(e) }),
+                )
+              }
+            >
+              Open Terminal
+            </button>
+          )}
           <button className="btn" onClick={toggleRunning}>
             {sandbox.status === "running" ? "Stop" : "Start"}
           </button>
@@ -202,6 +218,24 @@ export function SandboxDetail(props: {
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") run();
+                const history = historyRef.current;
+                if (e.key === "ArrowUp" && history.length > 0) {
+                  e.preventDefault();
+                  const pos = historyPos === -1 ? history.length - 1 : Math.max(0, historyPos - 1);
+                  setHistoryPos(pos);
+                  setCommand(history[pos]);
+                }
+                if (e.key === "ArrowDown" && historyPos !== -1) {
+                  e.preventDefault();
+                  const pos = historyPos + 1;
+                  if (pos >= history.length) {
+                    setHistoryPos(-1);
+                    setCommand("");
+                  } else {
+                    setHistoryPos(pos);
+                    setCommand(history[pos]);
+                  }
+                }
               }}
               disabled={sandbox.status !== "running"}
             />

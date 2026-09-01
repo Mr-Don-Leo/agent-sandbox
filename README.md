@@ -11,7 +11,9 @@ run in it via `docker exec` under the sandbox's policy:
 
 - **Filesystem** — the workspace is exposed as a *disposable copy* (`docker cp`
   into the container; the host original is untouched), *read-only* mount, or
-  *read-write* mount.
+  *read-write* mount. For disposable copies, **Review changes** shows a colored
+  diff of what the agent did (build artifacts excluded) and **Apply to host**
+  syncs it back — deletions included, `.git` never touched.
 - **Network** — *no network* (`--network none`), *full access*, or *allowlist*:
   the container joins an internal (no-egress) Docker network whose only way out
   is a filtering HTTP CONNECT proxy sidecar that refuses hosts not on the
@@ -26,6 +28,11 @@ run in it via `docker exec` under the sandbox's policy:
 
 Sandboxes are self-describing: the policy is stored as a JSON label on the
 container, so the app needs no local database and survives restarts.
+
+Commands stream their output live and can be stopped mid-run (the app records
+the run's PID inside the container and TERMs it). **Open Terminal** launches
+your terminal emulator with an interactive shell in the sandbox, and the run
+input keeps per-sandbox history (↑/↓).
 
 ## Repository layout
 
