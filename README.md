@@ -4,6 +4,8 @@ Safely execute coding agents inside disposable Docker containers with
 filesystem, network, and command policies. Linux desktop app built with
 Tauri 2 + React.
 
+![AgentSandbox](docs/screenshot.png)
+
 ## How it works
 
 Each sandbox is a Docker container idling on `sleep infinity`; agent commands
@@ -34,6 +36,13 @@ the run's PID inside the container and TERMs it). **Open Terminal** launches
 your terminal emulator with an interactive shell in the sandbox, and the run
 input keeps per-sandbox history (↑/↓).
 
+**Presets** fill the whole policy form in one click — including a
+**Claude Code** agent-runner preset (Node image, network allowlisted to
+Anthropic + npm + GitHub, guarded commands) that installs Claude Code into the
+sandbox automatically after creation; open the terminal and run `claude`.
+Image pulls happen before the container is created, with docker's progress
+streamed into the dialog.
+
 ## Repository layout
 
 - `src/` — React frontend. Tokens-only theming (`src/styles/tokens.css`) with
@@ -61,3 +70,7 @@ cd src-tauri && cargo test -p agentsandbox-core   # policy engine tests
 ```
 
 `npm run tauri build` produces deb/rpm/AppImage bundles.
+
+## License
+
+[MIT](LICENSE)

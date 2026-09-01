@@ -22,6 +22,12 @@ export interface Backend {
   applyWorkspace(id: string): Promise<void>;
   pickFolder(): Promise<string | null>;
   openTerminal(id: string): Promise<void>;
+  pullImage(image: string, pullId: string, cb: PullCallbacks): Promise<void>;
+}
+
+export interface PullCallbacks {
+  onLine(text: string): void;
+  onDone(exitCode: number, error: string | null): void;
 }
 
 export interface ExecCallbacks {
@@ -70,6 +76,31 @@ const tauriBackend: Backend = {
     return typeof picked === "string" ? picked : null;
   },
   openTerminal: (id) => invoke("open_terminal", { id }),
+  async pullImage(image, pullId, cb) {
+    const { listen } = await import("@tauri-apps/api/event");
+    type LineEvent = { pull_id: string; text: string };
+    type DoneEvent = { pull_id: string; exit_code: number; error: string | null };
+
+    const unsubs: (() => void)[] = [];
+    const cleanup = () => unsubs.splice(0).forEach((u) => u());
+
+    unsubs.push(
+      await listen<LineEvent>("pull:line", (e) => {
+        if (e.payload.pull_id === pullId) cb.onLine(e.payload.text);
+      }),
+      await listen<DoneEvent>("pull:done", (e) => {
+        if (e.payload.pull_id !== pullId) return;
+        cleanup();
+        cb.onDone(e.payload.exit_code, e.payload.error);
+      }),
+    );
+    try {
+      await invoke("pull_image", { image, pullId });
+    } catch (e) {
+      cleanup();
+      throw e;
+    }
+  },
 };
 
 // ── Mock backend for browser development ─────────────────────────────────
@@ -157,6 +188,12 @@ const mockBackend: Backend = {
   },
   async openTerminal() {
     throw new Error("Terminal is only available in the desktop app");
+  },
+  async pullImage(image, _pullId, cb) {
+    ["Pulling from library/" + image, "Downloading layers…", "Pull complete"].forEach(
+      (text, i) => setTimeout(() => cb.onLine(text), i * 300),
+    );
+    setTimeout(() => cb.onDone(0, null), 1000);
   },
 };
 
