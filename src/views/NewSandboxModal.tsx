@@ -6,19 +6,36 @@ import {
   KNOWN_IMAGES,
   NetworkMode,
   Policy,
+  PRESETS,
   WorkspaceMode,
 } from "../types";
 import { Checkbox, Dropdown, Field, Modal, Segmented } from "../ui/controls";
 
 export function NewSandboxModal(props: {
   onClose: () => void;
-  onCreate: (name: string, policy: Policy) => Promise<void>;
+  onCreate: (name: string, policy: Policy, bootstrap?: string) => Promise<void>;
 }) {
   const [name, setName] = useState("");
+  const [preset, setPreset] = useState("custom");
   const [policy, setPolicy] = useState<Policy>({ ...DEFAULT_POLICY });
   const [hostDraft, setHostDraft] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "pulling" | "creating">("idle");
+  const [pullLine, setPullLine] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const busy = phase !== "idle";
+
+  const applyPreset = (key: string) => {
+    setPreset(key);
+    const chosen = PRESETS.find((p) => p.key === key);
+    if (chosen) {
+      // Deep-copy so form edits never mutate the preset definition; the
+      // already-chosen workspace folder is kept.
+      setPolicy({
+        ...structuredClone(chosen.policy),
+        workspace_path: policy.workspace_path,
+      });
+    }
+  };
 
   const patch = (changes: Partial<Policy>) =>
     setPolicy((p) => ({ ...p, ...changes }));
@@ -44,14 +61,26 @@ export function NewSandboxModal(props: {
       setError("Choose a workspace folder to expose to the agent.");
       return;
     }
-    setBusy(true);
     setError(null);
+    setPhase("pulling");
     try {
-      await props.onCreate(name.trim(), policy);
+      await new Promise<void>((resolve, reject) => {
+        backend
+          .pullImage(policy.image, crypto.randomUUID(), {
+            onLine: setPullLine,
+            onDone: (code, err) =>
+              code === 0 ? resolve() : reject(new Error(err ?? "image pull failed")),
+          })
+          .catch(reject);
+      });
+      setPhase("creating");
+      const bootstrap = PRESETS.find((p) => p.key === preset)?.bootstrap;
+      await props.onCreate(name.trim(), policy, bootstrap);
       props.onClose();
     } catch (e) {
       setError(String(e));
-      setBusy(false);
+      setPhase("idle");
+      setPullLine("");
     }
   };
 
@@ -61,11 +90,23 @@ export function NewSandboxModal(props: {
       onClose={props.onClose}
       footer={
         <>
+          {phase === "pulling" && pullLine && (
+            <span
+              className="field-hint mono"
+              style={{ marginRight: "auto", alignSelf: "center", minWidth: 0 }}
+            >
+              {pullLine}
+            </span>
+          )}
           <button className="btn btn-ghost" onClick={props.onClose}>
             Cancel
           </button>
           <button className="btn btn-primary" onClick={create} disabled={busy}>
-            {busy ? "Creating…" : "Create Sandbox"}
+            {phase === "pulling"
+              ? "Pulling image…"
+              : phase === "creating"
+                ? "Creating…"
+                : "Create Sandbox"}
           </button>
         </>
       }
@@ -82,15 +123,24 @@ export function NewSandboxModal(props: {
             autoFocus
           />
         </Field>
-        <Field label="Base image">
+        <Field label="Preset" hint="Fills the whole form; tweak anything after.">
           <Dropdown
-            ariaLabel="Base image"
-            value={policy.image}
-            options={KNOWN_IMAGES}
-            onChange={(image) => patch({ image })}
+            ariaLabel="Preset"
+            value={preset}
+            options={PRESETS.map((p) => ({ value: p.key, label: p.label, sub: p.sub }))}
+            onChange={applyPreset}
           />
         </Field>
       </div>
+
+      <Field label="Base image">
+        <Dropdown
+          ariaLabel="Base image"
+          value={policy.image}
+          options={KNOWN_IMAGES}
+          onChange={(image) => patch({ image })}
+        />
+      </Field>
 
       <Field
         label="Workspace"

@@ -148,6 +148,15 @@ fn create_sandbox(app: tauri::AppHandle, name: String, policy: Policy) -> Result
         Some(dir.to_string_lossy().into_owned())
     };
 
+    // Roll the whole sandbox back if any later step fails so a bad create
+    // never leaves a half-built container/network/proxy behind.
+    let rollback = |err: String| -> String {
+        let _ = docker(&["rm".into(), "-f".into(), docker::container_name(&id)]);
+        let _ = docker(&["rm".into(), "-f".into(), docker::proxy_container_name(&id)]);
+        let _ = docker(&["network".into(), "rm".into(), docker::network_name(&id)]);
+        err
+    };
+
     // Allowlist mode: internal network + filtering egress proxy sidecar.
     if policy.network.mode == NetworkMode::Allowlist {
         docker(&[
@@ -155,28 +164,31 @@ fn create_sandbox(app: tauri::AppHandle, name: String, policy: Policy) -> Result
             "create".into(),
             "--internal".into(),
             docker::network_name(&id),
-        ])?;
+        ])
+        .map_err(&rollback)?;
         let mut proxy_args = docker::proxy_run_args(&id, proxy::PROXY_IMAGE);
         *proxy_args.last_mut().unwrap() = proxy::proxy_program(&policy.network.allowed_hosts);
-        docker(&proxy_args)?;
+        docker(&proxy_args).map_err(&rollback)?;
         // The proxy needs a way out; the sandbox stays internal-only.
         docker(&[
             "network".into(),
             "connect".into(),
             "bridge".into(),
             docker::proxy_container_name(&id),
-        ])?;
+        ])
+        .map_err(&rollback)?;
     }
 
     let args = docker::run_args(&id, &name, &policy, shim_host_dir.as_deref());
-    docker(&args)?;
+    docker(&args).map_err(&rollback)?;
 
     if policy.workspace_mode == WorkspaceMode::Copy && !policy.workspace_path.is_empty() {
         docker(&[
             "cp".into(),
             format!("{}/.", policy.workspace_path),
             format!("{}:{}", docker::container_name(&id), docker::WORKSPACE_DIR),
-        ])?;
+        ])
+        .map_err(&rollback)?;
     }
 
     Ok(Sandbox {
@@ -330,6 +342,60 @@ fn sandbox_id_of(container: &str) -> &str {
     container.strip_prefix("asb-").unwrap_or(container)
 }
 
+#[derive(Clone, Serialize)]
+struct PullLine {
+    pull_id: String,
+    text: String,
+}
+
+#[derive(Clone, Serialize)]
+struct PullDone {
+    pull_id: String,
+    exit_code: i32,
+    error: Option<String>,
+}
+
+/// Pull an image ahead of container creation, streaming docker's progress
+/// lines as `pull:line` events and finishing with `pull:done`.
+#[tauri::command]
+fn pull_image(app: tauri::AppHandle, image: String, pull_id: String) -> Result<(), String> {
+    let mut child = Command::new("docker")
+        .args(["pull", image.as_str()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to invoke docker: {e}"))?;
+
+    let stdout = child.stdout.take().expect("stdout piped");
+    let stderr = child.stderr.take().expect("stderr piped");
+
+    let out_app = app.clone();
+    let out_pull_id = pull_id.clone();
+    let out_thread = thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            let _ = out_app.emit(
+                "pull:line",
+                PullLine { pull_id: out_pull_id.clone(), text: line },
+            );
+        }
+    });
+
+    thread::spawn(move || {
+        let mut last_err = String::new();
+        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            last_err = line.clone();
+            let _ = app.emit("pull:line", PullLine { pull_id: pull_id.clone(), text: line });
+        }
+        let _ = out_thread.join();
+        let exit_code = child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
+        let error = (exit_code != 0).then_some(last_err);
+        let _ = app.emit("pull:done", PullDone { pull_id, exit_code, error });
+    });
+
+    Ok(())
+}
+
 /// Start a command in the sandbox and stream its output as `exec:line`
 /// events, finishing with one `exec:done`. Returns immediately.
 #[tauri::command]
@@ -431,6 +497,7 @@ pub fn run() {
             exec_stream,
             exec_stop,
             open_terminal,
+            pull_image,
             workspace_diff,
             apply_workspace,
         ])

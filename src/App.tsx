@@ -21,6 +21,8 @@ export default function App() {
   const [sandboxes, setSandboxes] = useState<Sandbox[]>([]);
   const [dockerError, setDockerError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  // Preset bootstrap command waiting to auto-run in a freshly created sandbox.
+  const [bootstrap, setBootstrap] = useState<{ id: string; command: string } | null>(null);
   const [themePref, setThemePref] = useState<ThemePref>(loadThemePref);
   const [skin, setSkin] = useState<Skin>(loadSkin);
 
@@ -46,9 +48,10 @@ export default function App() {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const createSandbox = async (name: string, policy: Policy) => {
+  const createSandbox = async (name: string, policy: Policy, bootstrapCmd?: string) => {
     const sandbox = await backend.createSandbox(name, policy);
     await refresh();
+    if (bootstrapCmd) setBootstrap({ id: sandbox.id, command: bootstrapCmd });
     setView({ kind: "sandbox", id: sandbox.id });
   };
 
@@ -116,6 +119,8 @@ export default function App() {
           (current ? (
             <SandboxDetail
               sandbox={current}
+              bootstrap={bootstrap?.id === current.id ? bootstrap.command : undefined}
+              onBootstrapConsumed={() => setBootstrap(null)}
               onChanged={refresh}
               onRemoved={() => {
                 setView({ kind: "list" });
