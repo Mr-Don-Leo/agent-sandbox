@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { backend, isMock } from "../backend";
 import {
   BLOCKABLE_COMMANDS,
   DEFAULT_POLICY,
@@ -95,12 +96,25 @@ export function NewSandboxModal(props: {
         label="Workspace"
         hint="The project folder the agent works on. Copy mode clones it into the container so the original is untouched until you apply changes."
       >
-        <input
-          className="input mono"
-          value={policy.workspace_path}
-          placeholder="/home/you/projects/my-app"
-          onChange={(e) => patch({ workspace_path: e.target.value })}
-        />
+        <div className="row">
+          <input
+            className="input mono"
+            value={policy.workspace_path}
+            placeholder="/home/you/projects/my-app"
+            onChange={(e) => patch({ workspace_path: e.target.value })}
+          />
+          {!isMock && (
+            <button
+              className="btn"
+              onClick={async () => {
+                const picked = await backend.pickFolder();
+                if (picked) patch({ workspace_path: picked });
+              }}
+            >
+              Browse…
+            </button>
+          )}
+        </div>
       </Field>
 
       <Field label="Workspace access">

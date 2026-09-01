@@ -516,6 +516,46 @@ html[data-skin="xp"] .modal-title {
   background: var(--accent-soft);
 }
 
+.banner.banner-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+/* ── Diff view ─────────────────────────────────────────────────────────── */
+.diff-view {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  overflow: auto;
+  max-height: 420px;
+  white-space: pre;
+}
+
+.diff-view .diff-file {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.diff-view .diff-hunk {
+  color: var(--accent);
+}
+
+.diff-view .diff-add {
+  color: var(--success);
+}
+
+.diff-view .diff-del {
+  color: var(--danger);
+}
+
+.diff-view .diff-ctx {
+  color: var(--text-secondary);
+}
+
 /* ── Console / run output ──────────────────────────────────────────────── */
 .console {
   background: var(--terminal-bg);

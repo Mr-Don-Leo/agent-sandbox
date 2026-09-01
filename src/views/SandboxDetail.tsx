@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { backend } from "../backend";
+import { backend, isMock } from "../backend";
 import { RunLine, Sandbox } from "../types";
+import { Modal } from "../ui/controls";
+import { DiffModal } from "./DiffModal";
 
 const STATUS_PILL: Record<Sandbox["status"], string> = {
   running: "pill-success",
@@ -24,12 +26,23 @@ export function SandboxDetail(props: {
   const { sandbox } = props;
   const [lines, setLines] = useState<RunLine[]>([]);
   const [command, setCommand] = useState("");
-  const [running, setRunning] = useState(false);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const consoleRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<string[]>([]);
+  const [historyPos, setHistoryPos] = useState(-1);
+  // Guards against events from a run started on a previously viewed sandbox.
+  const activeRunRef = useRef<string | null>(null);
+  const running = runId !== null;
 
   useEffect(() => {
     setLines([]);
     setCommand("");
+    setRunId(null);
+    setShowDiff(false);
+    setConfirmDelete(false);
+    activeRunRef.current = null;
   }, [sandbox.id]);
 
   useEffect(() => {
@@ -42,21 +55,38 @@ export function SandboxDetail(props: {
     const cmd = command.trim();
     if (!cmd || running) return;
     setCommand("");
-    setRunning(true);
+    historyRef.current.push(cmd);
+    setHistoryPos(-1);
+    const id = crypto.randomUUID();
+    setRunId(id);
+    activeRunRef.current = id;
     append({ kind: "cmd", text: `$ ${cmd}` });
+
+    const isCurrent = () => activeRunRef.current === id;
     try {
-      const result = await backend.execInSandbox(sandbox.id, cmd);
-      if (result.stdout) append({ kind: "out", text: result.stdout });
-      if (result.stderr) append({ kind: "err", text: result.stderr });
-      if (result.blocked) {
-        append({ kind: "meta", text: "blocked by command policy" });
-      } else if (result.exit_code !== 0) {
-        append({ kind: "meta", text: `exit code ${result.exit_code}` });
-      }
+      await backend.execStream(sandbox.id, id, cmd, {
+        onLine: (kind, text) => {
+          if (isCurrent()) append({ kind, text });
+        },
+        onDone: (exitCode, blocked) => {
+          if (!isCurrent()) return;
+          if (blocked) append({ kind: "meta", text: "blocked by command policy" });
+          else if (exitCode !== 0) append({ kind: "meta", text: `exit code ${exitCode}` });
+          setRunId(null);
+          activeRunRef.current = null;
+        },
+      });
     } catch (e) {
-      append({ kind: "err", text: String(e) });
+      if (isCurrent()) {
+        append({ kind: "err", text: String(e) });
+        setRunId(null);
+        activeRunRef.current = null;
+      }
     }
-    setRunning(false);
+  };
+
+  const stopRun = () => {
+    if (runId) backend.execStop(sandbox.id, runId).catch(() => {});
   };
 
   const toggleRunning = async () => {
@@ -84,10 +114,22 @@ export function SandboxDetail(props: {
           <div className="subtitle mono selectable">{sandbox.id}</div>
         </div>
         <div className="row">
+          {!isMock && sandbox.status === "running" && (
+            <button
+              className="btn"
+              onClick={() =>
+                backend.openTerminal(sandbox.id).catch((e) =>
+                  append({ kind: "err", text: String(e) }),
+                )
+              }
+            >
+              Open Terminal
+            </button>
+          )}
           <button className="btn" onClick={toggleRunning}>
             {sandbox.status === "running" ? "Stop" : "Start"}
           </button>
-          <button className="btn btn-danger" onClick={remove}>
+          <button className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
             Delete
           </button>
         </div>
@@ -109,6 +151,14 @@ export function SandboxDetail(props: {
               {sandbox.policy.workspace_mode === "ro" && "Read-only mount"}
               {sandbox.policy.workspace_mode === "rw" && "Read-write mount"}
             </div>
+            {sandbox.policy.workspace_mode === "copy" &&
+              sandbox.policy.workspace_path && (
+                <div>
+                  <button className="btn btn-sm" onClick={() => setShowDiff(true)}>
+                    Review changes
+                  </button>
+                </div>
+              )}
           </div>
           <div className="card summary-card">
             <span className="summary-title">Network</span>
@@ -168,19 +218,73 @@ export function SandboxDetail(props: {
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") run();
+                const history = historyRef.current;
+                if (e.key === "ArrowUp" && history.length > 0) {
+                  e.preventDefault();
+                  const pos = historyPos === -1 ? history.length - 1 : Math.max(0, historyPos - 1);
+                  setHistoryPos(pos);
+                  setCommand(history[pos]);
+                }
+                if (e.key === "ArrowDown" && historyPos !== -1) {
+                  e.preventDefault();
+                  const pos = historyPos + 1;
+                  if (pos >= history.length) {
+                    setHistoryPos(-1);
+                    setCommand("");
+                  } else {
+                    setHistoryPos(pos);
+                    setCommand(history[pos]);
+                  }
+                }
               }}
               disabled={sandbox.status !== "running"}
             />
-            <button
-              className="btn btn-primary"
-              onClick={run}
-              disabled={running || sandbox.status !== "running"}
-            >
-              Run
-            </button>
+            {running ? (
+              <button className="btn btn-danger" onClick={stopRun}>
+                Stop
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={run}
+                disabled={sandbox.status !== "running"}
+              >
+                Run
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {showDiff && (
+        <DiffModal
+          sandboxId={sandbox.id}
+          workspacePath={sandbox.policy.workspace_path}
+          onClose={() => setShowDiff(false)}
+        />
+      )}
+
+      {confirmDelete && (
+        <Modal
+          title="Delete sandbox?"
+          onClose={() => setConfirmDelete(false)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-danger" onClick={remove}>
+                Delete “{sandbox.name}”
+              </button>
+            </>
+          }
+        >
+          <p>
+            The container and any un-applied workspace changes inside it are
+            destroyed. The host folder is not touched.
+          </p>
+        </Modal>
+      )}
     </>
   );
 }
