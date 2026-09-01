@@ -20,6 +20,8 @@ function describeNetwork(sandbox: Sandbox): string {
 
 export function SandboxDetail(props: {
   sandbox: Sandbox;
+  bootstrap?: string;
+  onBootstrapConsumed: () => void;
   onChanged: () => void;
   onRemoved: () => void;
 }) {
@@ -51,12 +53,8 @@ export function SandboxDetail(props: {
 
   const append = (line: RunLine) => setLines((prev) => [...prev, line]);
 
-  const run = async () => {
-    const cmd = command.trim();
+  const runCommand = async (cmd: string) => {
     if (!cmd || running) return;
-    setCommand("");
-    historyRef.current.push(cmd);
-    setHistoryPos(-1);
     const id = crypto.randomUUID();
     setRunId(id);
     activeRunRef.current = id;
@@ -85,9 +83,28 @@ export function SandboxDetail(props: {
     }
   };
 
+  const run = () => {
+    const cmd = command.trim();
+    if (!cmd) return;
+    setCommand("");
+    historyRef.current.push(cmd);
+    setHistoryPos(-1);
+    runCommand(cmd);
+  };
+
   const stopRun = () => {
     if (runId) backend.execStop(sandbox.id, runId).catch(() => {});
   };
+
+  // Auto-run a preset's bootstrap command once the new sandbox is up.
+  const { bootstrap, onBootstrapConsumed } = props;
+  useEffect(() => {
+    if (bootstrap && sandbox.status === "running" && !running) {
+      onBootstrapConsumed();
+      runCommand(bootstrap);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrap, sandbox.id, sandbox.status]);
 
   const toggleRunning = async () => {
     if (sandbox.status === "running") await backend.stopSandbox(sandbox.id);

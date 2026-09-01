@@ -58,6 +58,89 @@ export const DEFAULT_POLICY: Policy = {
   memory_mb: 2048,
 };
 
+export interface Preset {
+  key: string;
+  label: string;
+  sub: string;
+  policy: Policy;
+  /** Command auto-run in the new sandbox's console right after creation. */
+  bootstrap?: string;
+}
+
+export const PRESETS: Preset[] = [
+  {
+    key: "custom",
+    label: "Custom",
+    sub: "Start from defaults",
+    policy: DEFAULT_POLICY,
+  },
+  {
+    key: "claude-code",
+    label: "Claude Code",
+    sub: "Agent runner, allowlisted network",
+    policy: {
+      image: "node:22-bookworm",
+      workspace_path: "",
+      workspace_mode: "copy",
+      network: {
+        mode: "allowlist",
+        allowed_hosts: [
+          "api.anthropic.com",
+          "claude.ai",
+          "statsig.anthropic.com",
+          "registry.npmjs.org",
+          "github.com",
+        ],
+      },
+      blocked_commands: ["sudo", "git push", "docker", "shutdown", "reboot"],
+      cpus: 4,
+      memory_mb: 4096,
+    },
+    bootstrap:
+      "npm install -g @anthropic-ai/claude-code && " +
+      "echo && echo 'Claude Code installed. Click \"Open Terminal\" and run: claude'",
+  },
+  {
+    key: "locked-down",
+    label: "Locked down",
+    sub: "No network, everything blocked",
+    policy: {
+      image: "ubuntu:24.04",
+      workspace_path: "",
+      workspace_mode: "copy",
+      network: { mode: "none", allowed_hosts: [] },
+      blocked_commands: [
+        "sudo",
+        "git push",
+        "docker",
+        "shutdown",
+        "reboot",
+        "ssh",
+        "scp",
+        "curl",
+        "wget",
+        "npm publish",
+      ],
+      cpus: 2,
+      memory_mb: 2048,
+    },
+  },
+  {
+    key: "full-trust",
+    label: "Full trust",
+    sub: "Live mount, open network",
+    policy: {
+      image: "ubuntu:24.04",
+      workspace_path: "",
+      workspace_mode: "rw",
+      network: { mode: "full", allowed_hosts: [] },
+      blocked_commands: [],
+      cpus: null,
+      memory_mb: null,
+    },
+  },
+];
+
 export const KNOWN_IMAGES: { value: string; sub: string }[] = [
   { value: "ubuntu:24.04", sub: "Minimal Ubuntu LTS" },
   { value: "alpine", sub: "Tiny busybox-based image" },
