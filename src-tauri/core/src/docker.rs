@@ -69,13 +69,15 @@ pub fn run_args(
     }
 
     match policy.workspace_mode {
+        // The `z` mount option relabels for SELinux hosts (Fedora enforcing
+        // blocks unlabeled bind mounts) and is a no-op elsewhere.
         WorkspaceMode::Ro => {
             args.push("-v".into());
-            args.push(format!("{}:{WORKSPACE_DIR}:ro", policy.workspace_path));
+            args.push(format!("{}:{WORKSPACE_DIR}:ro,z", policy.workspace_path));
         }
         WorkspaceMode::Rw => {
             args.push("-v".into());
-            args.push(format!("{}:{WORKSPACE_DIR}", policy.workspace_path));
+            args.push(format!("{}:{WORKSPACE_DIR}:z", policy.workspace_path));
         }
         // Copy mode: no mount; the caller `docker cp`s the workspace in after
         // the container exists, so the host original is never exposed.
@@ -84,7 +86,7 @@ pub fn run_args(
 
     if let Some(shim_dir) = shim_host_dir {
         args.push("-v".into());
-        args.push(format!("{shim_dir}:{SHIM_DIR}:ro"));
+        args.push(format!("{shim_dir}:{SHIM_DIR}:ro,z"));
         args.push("--env".into());
         args.push(format!(
             "PATH={SHIM_DIR}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -133,13 +135,15 @@ pub fn proxy_run_args(id: &str, proxy_image: &str) -> Vec<String> {
     ]
 }
 
-/// Arguments to execute one shell command inside the sandbox.
+/// Arguments to execute one shell command inside the sandbox. Deliberately a
+/// non-login shell: login shells source /etc/profile, which on many images
+/// resets PATH and would drop the shim directory from the front.
 pub fn exec_args(id: &str, command: &str) -> Vec<String> {
     vec![
         "exec".into(),
         container_name(id),
         "sh".into(),
-        "-lc".into(),
+        "-c".into(),
         command.into(),
     ]
 }
@@ -200,17 +204,23 @@ mod tests {
     }
 
     #[test]
-    fn readonly_mode_mounts_with_ro_flag() {
+    fn readonly_mode_mounts_with_ro_and_selinux_flags() {
         let mut p = policy();
         p.workspace_mode = WorkspaceMode::Ro;
         let args = run_args("abc", "demo", &p, None);
-        assert!(pair_present(&args, "-v", "/home/u/proj:/workspace:ro"));
+        assert!(pair_present(&args, "-v", "/home/u/proj:/workspace:ro,z"));
+    }
+
+    #[test]
+    fn exec_uses_a_non_login_shell() {
+        let args = exec_args("abc", "make test");
+        assert_eq!(args, ["exec", "asb-abc", "sh", "-c", "make test"]);
     }
 
     #[test]
     fn shim_dir_is_mounted_readonly_and_leads_path() {
         let args = run_args("abc", "demo", &policy(), Some("/data/shims/abc"));
-        assert!(pair_present(&args, "-v", "/data/shims/abc:/opt/agentsandbox/shims:ro"));
+        assert!(pair_present(&args, "-v", "/data/shims/abc:/opt/agentsandbox/shims:ro,z"));
         let path_env = args
             .iter()
             .find(|a| a.starts_with("PATH="))

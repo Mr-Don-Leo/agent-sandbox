@@ -219,7 +219,7 @@ fn remove_sandbox(id: String) -> Result<(), String> {
 #[tauri::command]
 fn exec_in_sandbox(id: String, command: String) -> Result<ExecResult, String> {
     let output = Command::new("docker")
-        .args(["exec", id.as_str(), "sh", "-lc", command.as_str()])
+        .args(["exec", id.as_str(), "sh", "-c", command.as_str()])
         .output()
         .map_err(|e| format!("failed to invoke docker: {e}"))?;
 
