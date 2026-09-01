@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AgentSandbox — Run coding agents. Keep your machine.</title>
+<meta name="description" content="A Linux desktop app that safely executes coding agents inside disposable Docker containers with filesystem, network, and command policies. Review every change before it touches your files." />
+<link rel="icon" type="image/png" href="favicon.png" />
+<style>
+  /* Design tokens — mirrors the app's tokens.css (Apple skin, light + dark). */
+  :root {
+    --font-ui: -apple-system, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+
+    --accent: #007aff;
+    --accent-contrast: #ffffff;
+    --accent-soft: rgba(0, 122, 255, 0.14);
+    --danger: #ff3b30;
+    --success: #34c759;
+    --warning: #ff9500;
+
+    --bg: #f5f5f7;
+    --bg-elevated: #ffffff;
+    --bg-nav: rgba(246, 246, 248, 0.82);
+    --bg-input: rgba(0, 0, 0, 0.045);
+    --bg-hover: rgba(0, 0, 0, 0.06);
+    --text: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #a1a1a6;
+    --border: rgba(0, 0, 0, 0.09);
+
+    --shadow-card: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+    --shadow-modal: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 24px 64px rgba(0, 0, 0, 0.22);
+
+    --terminal-bg: #1c1c1e;
+    --terminal-fg: #e8e8ed;
+
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    --accent: #0a84ff;
+    --accent-soft: rgba(10, 132, 255, 0.2);
+    --danger: #ff453a;
+    --success: #30d158;
+    --warning: #ff9f0a;
+
+    --bg: #1c1c1e;
+    --bg-elevated: #2a2a2d;
+    --bg-nav: rgba(28, 28, 30, 0.78);
+    --bg-input: rgba(255, 255, 255, 0.065);
+    --bg-hover: rgba(255, 255, 255, 0.09);
+    --text: #f5f5f7;
+    --text-secondary: #98989f;
+    --text-tertiary: #636369;
+    --border: rgba(255, 255, 255, 0.1);
+
+    --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-modal: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 24px 64px rgba(0, 0, 0, 0.55);
+
+    --terminal-bg: #121214;
+    --terminal-fg: #e8e8ed;
+
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.6;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; }
+
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--bg-nav);
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav .wrap { display: flex; align-items: center; gap: 18px; height: 52px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14.5px; letter-spacing: -0.3px; color: var(--text); }
+  .brand:hover { text-decoration: none; }
+  .logo {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--accent); color: var(--accent-contrast);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px;
+  }
+  .nav-links { margin-left: auto; display: flex; gap: 4px; }
+  .nav-links a {
+    color: var(--text-secondary); padding: 6px 11px; border-radius: var(--radius-sm);
+    font-weight: 500;
+  }
+  .nav-links a:hover { background: var(--bg-hover); color: var(--text); text-decoration: none; }
+
+  .hero { padding: 72px 0 40px; text-align: center; }
+  .hero .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; padding: 4px 12px; font-size: 11.5px; font-weight: 600;
+  }
+  h1 {
+    margin: 18px 0 0; font-size: clamp(30px, 5.5vw, 46px); font-weight: 700;
+    letter-spacing: -1px; line-height: 1.12;
+  }
+  .hero p.lede {
+    margin: 16px auto 0; max-width: 640px;
+    color: var(--text-secondary); font-size: 16.5px;
+  }
+  .cta { margin-top: 26px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--font-ui); font-size: 14px; font-weight: 500;
+    color: var(--text); background: var(--bg-input);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 9px 18px; cursor: pointer; transition: background 120ms ease, transform 100ms ease;
+  }
+  .btn:hover { background: var(--bg-hover); text-decoration: none; }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--accent); border-color: transparent; color: var(--accent-contrast); }
+  .btn-primary:hover { background: var(--accent); filter: brightness(1.08); }
+
+  .shot { margin: 44px auto 0; max-width: 920px; }
+  .shot img {
+    width: 100%; display: block;
+    border-radius: var(--radius-lg); border: 1px solid var(--border);
+    box-shadow: var(--shadow-modal);
+  }
+
+  section { padding: 64px 0 8px; }
+  .section-head { text-align: center; margin-bottom: 34px; }
+  .section-head h2 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.4px; }
+  .section-head p { margin: 8px auto 0; max-width: 560px; color: var(--text-secondary); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
+    padding: 20px 22px;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .card:hover { transform: translateY(-2px); }
+  .feature-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 700; font-size: 12.5px; margin-bottom: 10px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .card p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+  .card code { font-family: var(--font-mono); font-size: 12px; background: var(--bg-input); border-radius: 5px; padding: 1px 5px; }
+
+  .console {
+    background: var(--terminal-bg); color: var(--terminal-fg);
+    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7;
+    border-radius: var(--radius-md); border: 1px solid var(--border);
+    padding: 16px 18px; overflow-x: auto; white-space: pre;
+    box-shadow: var(--shadow-card);
+  }
+  .console .c-cmd { color: var(--accent); font-weight: 600; }
+  .console .c-err { color: var(--danger); }
+  .console .c-meta { color: var(--text-tertiary); font-style: italic; }
+  .console .c-ok { color: var(--success); }
+
+  .how { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center; }
+  @media (max-width: 760px) { .how { grid-template-columns: 1fr; } }
+  .how ul { margin: 0; padding-left: 18px; color: var(--text-secondary); }
+  .how li { margin-bottom: 9px; }
+  .how li strong { color: var(--text); font-weight: 600; }
+
+  .skins { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .skin-preview {
+    height: 130px; border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-bottom: 1px solid var(--border); position: relative; overflow: hidden;
+  }
+  .skin-preview .bar { position: absolute; top: 0; left: 0; right: 0; height: 22px; }
+  .skin-preview .win {
+    position: absolute; top: 36px; left: 18px; right: 18px; bottom: -8px;
+    border-radius: 8px 8px 0 0;
+  }
+  .skin-card { padding: 0; overflow: hidden; }
+  .skin-meta { padding: 14px 18px; }
+  .skin-meta h3 { margin: 0; font-size: 14.5px; }
+  .skin-meta p { margin: 2px 0 0; color: var(--text-tertiary); font-size: 12px; }
+
+  .sk-apple { background: linear-gradient(160deg, #eef1f6, #dfe5ee); }
+  .sk-apple .bar { background: rgba(255, 255, 255, 0.7); }
+  .sk-apple .win { background: #ffffff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+  .sk-cyber { background: #0b0714; }
+  .sk-cyber .bar { background: rgba(0, 240, 255, 0.08); }
+  .sk-cyber .win { background: #141024; box-shadow: 0 0 24px rgba(0, 240, 255, 0.25); border: 1px solid rgba(0, 240, 255, 0.35); }
+  .sk-xp { background: #ece9d8; }
+  .sk-xp .bar { background: linear-gradient(180deg, #3d95ff, #2456c9); }
+  .sk-xp .win { background: #fdfcf7; border: 1px solid #7f9db9; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
+
+  .dev-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .dev-cols { grid-template-columns: 1fr; } }
+
+  footer {
+    margin-top: 72px; border-top: 1px solid var(--border);
+    padding: 26px 0 40px; color: var(--text-tertiary); font-size: 12.5px;
+  }
+  footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="#"><span class="logo">AS</span> AgentSandbox</a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#skins">Skins</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/Mr-Don-Leo/agent-sandbox">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <span class="pill">Linux · Tauri 2 + React · MIT</span>
+  <h1>Run coding agents.<br />Keep your machine.</h1>
+  <p class="lede">
+    AgentSandbox executes coding agents inside disposable Docker containers with
+    filesystem, network, and command policies — and shows you every change
+    before it touches your files.
+  </p>
+  <div class="cta">
+    <a class="btn btn-primary" href="#install">Get AgentSandbox</a>
+    <a class="btn" href="https://github.com/Mr-Don-Leo/agent-sandbox">View source</a>
+  </div>
+  <div class="shot">
+    <img src="screenshot.png" alt="AgentSandbox showing a running sandbox with policy cards and a streaming console" />
+  </div>
+</header>
+
+<section id="features" class="wrap">
+  <div class="section-head">
+    <h2>Policies, not trust</h2>
+    <p>Every sandbox is a container with three independent lines of defense — and a paper trail.</p>
+  </div>
+  <div class="grid">
+    <div class="card"><span class="feature-num">1</span>
+      <h3>Disposable workspaces</h3>
+      <p>Your project is copied into the container. The agent edits the copy;
+      the original on disk is untouched until you say otherwise. Read-only and
+      read-write mounts are there when you want them.</p>
+    </div>
+    <div class="card"><span class="feature-num">2</span>
+      <h3>Review &amp; apply</h3>
+      <p>One click shows a colored diff of everything the agent changed —
+      build artifacts excluded. Apply syncs it back with deletions included,
+      and never touches your <code>.git</code>.</p>
+    </div>
+    <div class="card"><span class="feature-num">3</span>
+      <h3>Network allowlists</h3>
+      <p>No network, full network, or an allowlist: the sandbox joins an
+      internal Docker network whose only way out is a filtering egress proxy
+      that refuses hosts you didn't approve.</p>
+    </div>
+    <div class="card"><span class="feature-num">4</span>
+      <h3>Command policies</h3>
+      <p>Block <code>sudo</code>, <code>git push</code>, or any command by
+      name — even single subcommands. Blocked calls fail loudly in the console
+      with the policy that stopped them.</p>
+    </div>
+    <div class="card"><span class="feature-num">5</span>
+      <h3>Live console</h3>
+      <p>Commands stream their output line by line and can be stopped mid-run —
+      the app TERMs the process inside the container, not just the pipe.</p>
+    </div>
+    <div class="card"><span class="feature-num">6</span>
+      <h3>One-click Claude Code</h3>
+      <p>The Claude Code preset spins up a Node sandbox allowlisted to
+      Anthropic, npm, and GitHub, then installs the agent for you. Open the
+      terminal and run <code>claude</code>.</p>
+    </div>
+    <div class="card"><span class="feature-num">7</span>
+      <h3>Presets</h3>
+      <p>Locked down, full trust, or your own mix — presets fill the whole
+      policy form in one click and stay fully editable.</p>
+    </div>
+    <div class="card"><span class="feature-num">8</span>
+      <h3>No database</h3>
+      <p>Each sandbox's policy lives as a label on its container. Restart the
+      app, restart the machine — your sandboxes are still there.</p>
+    </div>
+    <div class="card"><span class="feature-num">9</span>
+      <h3>Resource limits</h3>
+      <p>CPU and memory caps per sandbox, plus
+      <code>no-new-privileges</code> on every container.</p>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="wrap">
+  <div class="section-head">
+    <h2>How it works</h2>
+    <p>Plain Docker, arranged carefully. No daemons of our own, nothing to keep in sync.</p>
+  </div>
+  <div class="how">
+    <ul>
+      <li><strong>A sandbox is a container</strong> idling on
+        <code>sleep infinity</code>; agent commands arrive via
+        <code>docker exec</code> under the sandbox's policy.</li>
+      <li><strong>Allowlist mode</strong> pairs an internal, no-egress network
+        with a proxy sidecar — the container's only route out — which tunnels
+        approved hosts and returns <code>403</code> for everything else.</li>
+      <li><strong>Blocked commands</strong> become read-only PATH shims inside
+        the container that refuse with exit 126; real containment comes from
+        the container plus the filesystem and network policy.</li>
+      <li><strong>Applying changes</strong> stages the container's workspace
+        with <code>docker cp</code> and syncs it over the original with
+        <code>rsync --delete</code>.</li>
+    </ul>
+    <div class="console"><span class="c-cmd">$ sudo whoami</span>
+<span class="c-err">agentsandbox: blocked by command policy: sudo</span>
+<span class="c-meta">blocked by command policy</span>
+<span class="c-cmd">$ curl https://example.com</span>
+<span class="c-err">403 Forbidden by sandbox policy</span>
+<span class="c-cmd">$ npm test</span>
+<span class="c-ok">✓ 27 passing</span></div>
+  </div>
+</section>
+
+<section id="skins" class="wrap">
+  <div class="section-head">
+    <h2>Three skins, one token system</h2>
+    <p>Every color, radius, and shadow comes from CSS tokens — skins swap the tokens, nothing else.</p>
+  </div>
+  <div class="skins">
+    <div class="card skin-card">
+      <div class="skin-preview sk-apple"><div class="bar"></div><div class="win"></div></div>
+      <div class="skin-meta"><h3>Apple</h3><p>Light &amp; dark · translucency and hairline borders</p></div>
+    </div>
+    <div class="card skin-card">
+      <div class="skin-preview sk-cyber"><div class="bar"></div><div class="win"></div></div>
+      <div class="skin-meta"><h3>Cyberpunk</h3><p>Always dark · neon cyan, glow shadows, grid overlay</p></div>
+    </div>
+    <div class="card skin-card">
+      <div class="skin-preview sk-xp"><div class="bar"></div><div class="win"></div></div>
+      <div class="skin-meta"><h3>XP</h3><p>Always light · Luna beige, blue chrome, beveled buttons</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="install" class="wrap">
+  <div class="section-head">
+    <h2>Install</h2>
+    <p>Build from source today — deb, rpm, and AppImage bundles come out of one command.</p>
+  </div>
+  <div class="dev-cols">
+    <div class="card">
+      <h3>Requirements</h3>
+      <p>Linux with Docker running, Node 20+, Rust stable, and Tauri's WebKitGTK
+      dependencies (<code>webkit2gtk4.1-devel</code>, <code>gtk3-devel</code>,
+      <code>librsvg2-devel</code> on Fedora; see the README for other distros).</p>
+    </div>
+    <div class="console"><span class="c-cmd">$ git clone https://github.com/Mr-Don-Leo/agent-sandbox</span>
+<span class="c-cmd">$ cd agent-sandbox &amp;&amp; npm install</span>
+<span class="c-cmd">$ npm run tauri dev</span>    <span class="c-meta"># run it</span>
+<span class="c-cmd">$ npm run tauri build</span>  <span class="c-meta"># deb / rpm / AppImage</span></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>MIT licensed. Built with Tauri 2 + React.</span>
+    <span><a href="https://github.com/Mr-Don-Leo/agent-sandbox">github.com/Mr-Don-Leo/agent-sandbox</a></span>
+  </div>
+</footer>
+
+<script>
+  const setTheme = (m) => document.documentElement.dataset.theme = m.matches ? "dark" : "light";
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  setTheme(mq); mq.addEventListener("change", setTheme);
+</script>
+
+</body>
+</html>
