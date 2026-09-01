@@ -26,16 +26,21 @@ export function SandboxDetail(props: {
   const { sandbox } = props;
   const [lines, setLines] = useState<RunLine[]>([]);
   const [command, setCommand] = useState("");
-  const [running, setRunning] = useState(false);
+  const [runId, setRunId] = useState<string | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const consoleRef = useRef<HTMLDivElement>(null);
+  // Guards against events from a run started on a previously viewed sandbox.
+  const activeRunRef = useRef<string | null>(null);
+  const running = runId !== null;
 
   useEffect(() => {
     setLines([]);
     setCommand("");
+    setRunId(null);
     setShowDiff(false);
     setConfirmDelete(false);
+    activeRunRef.current = null;
   }, [sandbox.id]);
 
   useEffect(() => {
@@ -48,21 +53,36 @@ export function SandboxDetail(props: {
     const cmd = command.trim();
     if (!cmd || running) return;
     setCommand("");
-    setRunning(true);
+    const id = crypto.randomUUID();
+    setRunId(id);
+    activeRunRef.current = id;
     append({ kind: "cmd", text: `$ ${cmd}` });
+
+    const isCurrent = () => activeRunRef.current === id;
     try {
-      const result = await backend.execInSandbox(sandbox.id, cmd);
-      if (result.stdout) append({ kind: "out", text: result.stdout });
-      if (result.stderr) append({ kind: "err", text: result.stderr });
-      if (result.blocked) {
-        append({ kind: "meta", text: "blocked by command policy" });
-      } else if (result.exit_code !== 0) {
-        append({ kind: "meta", text: `exit code ${result.exit_code}` });
-      }
+      await backend.execStream(sandbox.id, id, cmd, {
+        onLine: (kind, text) => {
+          if (isCurrent()) append({ kind, text });
+        },
+        onDone: (exitCode, blocked) => {
+          if (!isCurrent()) return;
+          if (blocked) append({ kind: "meta", text: "blocked by command policy" });
+          else if (exitCode !== 0) append({ kind: "meta", text: `exit code ${exitCode}` });
+          setRunId(null);
+          activeRunRef.current = null;
+        },
+      });
     } catch (e) {
-      append({ kind: "err", text: String(e) });
+      if (isCurrent()) {
+        append({ kind: "err", text: String(e) });
+        setRunId(null);
+        activeRunRef.current = null;
+      }
     }
-    setRunning(false);
+  };
+
+  const stopRun = () => {
+    if (runId) backend.execStop(sandbox.id, runId).catch(() => {});
   };
 
   const toggleRunning = async () => {
@@ -185,13 +205,19 @@ export function SandboxDetail(props: {
               }}
               disabled={sandbox.status !== "running"}
             />
-            <button
-              className="btn btn-primary"
-              onClick={run}
-              disabled={running || sandbox.status !== "running"}
-            >
-              Run
-            </button>
+            {running ? (
+              <button className="btn btn-danger" onClick={stopRun}>
+                Stop
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={run}
+                disabled={sandbox.status !== "running"}
+              >
+                Run
+              </button>
+            )}
           </div>
         </div>
       </div>
