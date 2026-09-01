@@ -4,6 +4,8 @@ Safely execute coding agents inside disposable Docker containers with
 filesystem, network, and command policies. Linux desktop app built with
 Tauri 2 + React.
 
+![AgentSandbox](docs/screenshot.png)
+
 ## How it works
 
 Each sandbox is a Docker container idling on `sleep infinity`; agent commands
@@ -61,3 +63,7 @@ cd src-tauri && cargo test -p agentsandbox-core   # policy engine tests
 ```
 
 `npm run tauri build` produces deb/rpm/AppImage bundles.
+
+## License
+
+[MIT](LICENSE)
