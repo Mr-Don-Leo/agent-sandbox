@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { backend, isMock } from "../backend";
-import { RunLine, Sandbox } from "../types";
+import {
+  appendLine,
+  dropSession,
+  pushHistory,
+  startRun,
+  stopRun,
+  useRunSession,
+} from "../runStore";
+import { Sandbox } from "../types";
 import { Modal } from "../ui/controls";
 import { DiffModal } from "./DiffModal";
 
@@ -26,74 +34,34 @@ export function SandboxDetail(props: {
   onRemoved: () => void;
 }) {
   const { sandbox } = props;
-  const [lines, setLines] = useState<RunLine[]>([]);
+  // Console lines, run state, and history live in the run store so they
+  // survive switching screens while a command keeps streaming.
+  const { lines, runId, history } = useRunSession(sandbox.id);
   const [command, setCommand] = useState("");
-  const [runId, setRunId] = useState<string | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const consoleRef = useRef<HTMLDivElement>(null);
-  const historyRef = useRef<string[]>([]);
   const [historyPos, setHistoryPos] = useState(-1);
-  // Guards against events from a run started on a previously viewed sandbox.
-  const activeRunRef = useRef<string | null>(null);
   const running = runId !== null;
 
   useEffect(() => {
-    setLines([]);
     setCommand("");
-    setRunId(null);
+    setHistoryPos(-1);
     setShowDiff(false);
     setConfirmDelete(false);
-    activeRunRef.current = null;
   }, [sandbox.id]);
 
   useEffect(() => {
     consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight });
   }, [lines]);
 
-  const append = (line: RunLine) => setLines((prev) => [...prev, line]);
-
-  const runCommand = async (cmd: string) => {
-    if (!cmd || running) return;
-    const id = crypto.randomUUID();
-    setRunId(id);
-    activeRunRef.current = id;
-    append({ kind: "cmd", text: `$ ${cmd}` });
-
-    const isCurrent = () => activeRunRef.current === id;
-    try {
-      await backend.execStream(sandbox.id, id, cmd, {
-        onLine: (kind, text) => {
-          if (isCurrent()) append({ kind, text });
-        },
-        onDone: (exitCode, blocked) => {
-          if (!isCurrent()) return;
-          if (blocked) append({ kind: "meta", text: "blocked by command policy" });
-          else if (exitCode !== 0) append({ kind: "meta", text: `exit code ${exitCode}` });
-          setRunId(null);
-          activeRunRef.current = null;
-        },
-      });
-    } catch (e) {
-      if (isCurrent()) {
-        append({ kind: "err", text: String(e) });
-        setRunId(null);
-        activeRunRef.current = null;
-      }
-    }
-  };
-
   const run = () => {
     const cmd = command.trim();
     if (!cmd) return;
     setCommand("");
-    historyRef.current.push(cmd);
+    pushHistory(sandbox.id, cmd);
     setHistoryPos(-1);
-    runCommand(cmd);
-  };
-
-  const stopRun = () => {
-    if (runId) backend.execStop(sandbox.id, runId).catch(() => {});
+    startRun(sandbox.id, cmd);
   };
 
   // Auto-run a preset's bootstrap command once the new sandbox is up.
@@ -101,7 +69,7 @@ export function SandboxDetail(props: {
   useEffect(() => {
     if (bootstrap && sandbox.status === "running" && !running) {
       onBootstrapConsumed();
-      runCommand(bootstrap);
+      startRun(sandbox.id, bootstrap);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootstrap, sandbox.id, sandbox.status]);
@@ -114,6 +82,7 @@ export function SandboxDetail(props: {
 
   const remove = async () => {
     await backend.removeSandbox(sandbox.id);
+    dropSession(sandbox.id);
     props.onRemoved();
   };
 
@@ -136,7 +105,7 @@ export function SandboxDetail(props: {
               className="btn"
               onClick={() =>
                 backend.openTerminal(sandbox.id).catch((e) =>
-                  append({ kind: "err", text: String(e) }),
+                  appendLine(sandbox.id, { kind: "err", text: String(e) }),
                 )
               }
             >
@@ -235,7 +204,6 @@ export function SandboxDetail(props: {
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") run();
-                const history = historyRef.current;
                 if (e.key === "ArrowUp" && history.length > 0) {
                   e.preventDefault();
                   const pos = historyPos === -1 ? history.length - 1 : Math.max(0, historyPos - 1);
@@ -257,7 +225,7 @@ export function SandboxDetail(props: {
               disabled={sandbox.status !== "running"}
             />
             {running ? (
-              <button className="btn btn-danger" onClick={stopRun}>
+              <button className="btn btn-danger" onClick={() => stopRun(sandbox.id)}>
                 Stop
               </button>
             ) : (

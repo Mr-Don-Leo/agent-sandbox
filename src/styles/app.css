@@ -97,6 +97,30 @@
   border-radius: 999px;
 }
 
+/* Ambient "command running" indicator for sandboxes off the current screen. */
+.sidebar-item .run-dots {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sidebar-item .run-dots span {
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: dot-bounce 1.2s infinite;
+}
+
+.sidebar-item .run-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.sidebar-item .run-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding-top: 8px;
