@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { backend, isMock } from "./backend";
+import { useActiveRunIds } from "./runStore";
 import { applyTheme, loadSkin, loadThemePref, Skin, ThemePref, watchSystemTheme } from "./theme";
 import { Policy, Sandbox } from "./types";
 import { NewSandboxModal } from "./views/NewSandboxModal";
@@ -25,6 +26,7 @@ export default function App() {
   const [bootstrap, setBootstrap] = useState<{ id: string; command: string } | null>(null);
   const [themePref, setThemePref] = useState<ThemePref>(loadThemePref);
   const [skin, setSkin] = useState<Skin>(loadSkin);
+  const activeRunIds = useActiveRunIds();
 
   useEffect(() => {
     applyTheme(themePref, skin);
@@ -88,6 +90,13 @@ export default function App() {
               style={{ background: STATUS_COLOR[sandbox.status] }}
             />
             <span className="label">{sandbox.name}</span>
+            {activeRunIds.includes(sandbox.id) && (
+              <span className="run-dots" aria-label="Command running">
+                <span />
+                <span />
+                <span />
+              </span>
+            )}
           </button>
         ))}
 
